@@ -91,7 +91,7 @@ def read_data_UDP():
             break
 
 # Function to process the latest UDP data and move the robot
-def move_robot(robot, gripper, needle, text_label, torque_label, torque_button):
+def move_robot(robot, gripper, needle, text_label):
     global ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, Endowrist_rpy, Gripper_rpy, Servo_torques, data_lock
     global e_roll, e_pitch, e_yaw, g_roll, g_pitch, g_yaw, s1, s2, s3, s4
         
@@ -159,36 +159,9 @@ def move_robot(robot, gripper, needle, text_label, torque_label, torque_button):
 
             elif s1 == 1:
                 #Tanca la pinça → agafa l’agulla
-                needle.setParent(gripper)
+                needle.setParentStatic(gripper)
                 needle.setPose(TxyzRxyz_2_Pose([0, 0, 0, 0, 0, 0]))
-                status_message = "🔵 S1 no premut: agulla agafada"
-        # --- Handle Servo Torques if available ---
-        if current_Servo_torques:
-        # Example expected JSON: {"device": "G4_Servos", "torques": [0.5, 0.8, 1.2, 0.4]}
-            Torque_roll1 = current_Servo_torques.get("Torque_roll1", [])
-            Torque_roll2 = current_Servo_torques.get("Torque_roll2", [])
-            Torque_pitch = current_Servo_torques.get("Torque_pitch", [])
-            Torque_yaw = current_Servo_torques.get("Torque_yaw", [])
-            totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw
-            if totalTorque:
-                torque_values_str = ", ".join([f"{t:.2f}" for t in totalTorque])
-                servo_torques_msg = f"Total torque: [{torque_values_str}])"
-
-            # Determine torque level color
-                if totalTorque < 0.5:
-                    color = "green"
-                    level_text = "LOW TORQUE"
-                elif totalTorque < 1.0:
-                    color = "yellow"
-                    level_text = "MEDIUM TORQUE"
-                else:
-                    color = "red"
-                    level_text = "HIGH TORQUE"
-
-                # Update the torque label and button safely in the Tkinter thread
-                torque_label.after(0, lambda: torque_label.config(text=servo_torques_msg))
-                torque_button.after(0, lambda: torque_button.config(text=level_text, bg=color))
-                        
+                status_message = "🔵 S1 no premut: agulla agafada"    
             # Update the label with the latest values
         update_text_label(text_label, endowrist_orientation_msg, gripper_orientation_msg, status_message, servo_torques_msg)
 
@@ -245,6 +218,31 @@ def main():
 
     torque_button = tk.Button(root, text="Torque Level", width=20, height=2, bg="gray")
     torque_button.pack(pady=5)
+    
+    # Example expected JSON: {"device": "G4_Servos", "torques": [0.5, 0.8, 1.2, 0.4]}
+    Torque_roll1 = Servo_torques.get("Torque_roll1", [])
+    Torque_roll2 = Servo_torques.get("Torque_roll2", [])
+    Torque_pitch = Servo_torques.get("Torque_pitch", [])
+    Torque_yaw = Servo_torques.get("Torque_yaw", [])
+    totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw
+    if totalTorque:
+        torque_values_str = ", ".join([f"{t:.2f}" for t in totalTorque])
+        servo_torques_msg = f"Total torque: [{torque_values_str}])"
+
+# Determine torque level color
+        if totalTorque < 0.5:
+            color = "green"
+            level_text = "LOW TORQUE"
+        elif totalTorque < 1.0:
+            color = "yellow"
+            level_text = "MEDIUM TORQUE"
+        else:
+            color = "red"
+            level_text = "HIGH TORQUE"
+
+        # Update the torque label and button safely in the Tkinter thread
+        torque_label.after(0, lambda: torque_label.config(text=servo_torques_msg))
+        torque_button.after(0, lambda: torque_button.config(text=level_text, bg=color))
 
     # Start the UDP reading thread
     udp_thread = threading.Thread(target=read_data_UDP)

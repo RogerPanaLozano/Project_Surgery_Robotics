@@ -32,6 +32,9 @@ WiFiUDP udp;
 IMU imu;
 // Orientation data
 float Gri_roll = 0.0, Gri_pitch = 0.0, Gri_yaw = 0.0;
+// Torque data
+float Torque_roll1 = 0.0, Torque_roll2 = 0.0, Torque_pitch = 0.0, Torque_yaw = 0.0;
+
 
 void connectToWiFi() {
   Serial.print("Connecting to Wi-Fi");
@@ -81,19 +84,56 @@ void sendOrientationUDP() {
   udp.endPacket();
 }
 
+// Code to receive torque from servo module
+void receiveTorqueUDP() {
+  int packetSize = udp.parsePacket();
+  if (packetSize) {
+    byte packetBuffer[512];
+    int len = udp.read(packetBuffer, 512);
+    if (len > 0) {
+      packetBuffer[len] = '\0';
+      Serial.print("Received packet size: ");
+      Serial.println(packetSize);
+      Serial.print("Received: ");
+      Serial.println((char*)packetBuffer);
+
+      JsonDocument doc;  // ✅ Versió 7
+      DeserializationError error = deserializeJson(doc, packetBuffer);
+      if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+        return;
+      }
+
+      const char* device = doc["device"];
+      if (strcmp(device, "G4_Servos") == 0) {
+        Torque_roll1 = round(doc["Torque_roll1"].as<float>());
+        Torque_roll2 = round(doc["Torque_roll2"].as<float>());
+        Torque_pitch = round(doc["Torque_pitch"].as<float>());
+        Torque_yaw = round(doc["Torque_yaw"].as<float>());
+        Serial.print(" Torque_roll1: "); Serial.print(Torque_roll1);
+        Serial.print(" Torque_roll2: "); Serial.print(Torque_roll2);
+        Serial.print(" Torque_pitch: "); Serial.println(Torque_pitch);
+        Serial.print(" Torque_yaw: "); Serial.println(Torque_yaw);
+
+        // Vibration motor control based on torque values
+        float totalTorque = Torque_roll1 + Torque_yaw;
+        // Convert torque to PWM value (0-255)
+        int vibrationValue = constrain(totalTorque * 10, 0, 255); // Adjust the scaling factor as needed
+        ledcWrite(0, vibrationValue); // Set the PWM value for the vibration motor
+        Serial.print("Vibration motor value: ");
+        Serial.println(vibrationValue);
+      } else {
+        Serial.println("Unknown device.");
+      }
+    }
+  } 
+}
+
 void setup() {
   Serial.begin(115200);
   Wire.begin();
   delay(2000);
-
-//  if (!mpu.setup(0x68)) {
-//    while (1) {
-//      Serial.println("MPU connection failed.");
-//      delay(5000);
-//    }
-//  }
-//  Serial.println("MPU connected");
-//  delay(2000);
 
 // Inicialitza IMU (amb DMP)
   imu.Install();
@@ -104,10 +144,15 @@ void setup() {
 
   pinMode(PIN_S1, INPUT);
   pinMode(PIN_S2, INPUT);
+
+  // Configure PWM for the vibration motor (channel 0)
+  ledcSetup(0, 5000, 8); // Channel 0, frequency 5kHz, resolution 8 bits
+  ledcAttachPin(vibrationPin, 0); // Attach the vibration motor to channel 0
 }
 
 void loop() {
   updateOrientation();
   sendOrientationUDP();
+  receiveTorqueUDP();
   delay(10);
 }
