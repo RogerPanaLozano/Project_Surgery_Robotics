@@ -43,6 +43,10 @@ float sumRoll1 = 0, sumRoll2 = 0, sumPitch = 0, sumYaw = 0;
 float OldValueRoll = 0, OldValuePitch = 0, OldValueYaw = 0;
 float roll = 0, pitch = 0, yaw = 0;
 int s1 = 1, s2 = 1;
+float initialYaw;
+float incrementYaw;
+boolean firstTime = true;
+float actualYawServo;
 
 void connectToWiFi() {
   Serial.print("Connecting to Wi-Fi");
@@ -114,32 +118,59 @@ float getTorque(float& sum, int analogPin, float& previous) {
   return diff;
 }
 
+// Function to move servos according the angles gotten from gripper
 void moveServos() {
-
-
+  
   float delta = 0;
-
-  if (!yawInitialized) {
-    initialYaw = Gri_yaw;
-    yawInitialized = true;
-  }
-
   if (s1 == 0) {
     delta = 40;
     Serial.println("S1 premut → Obrint");
   }
+  
+  // Code to make roll centered at 90º
+  if (Gri_roll >= 270 && Gri_roll <= 360){
+    int rollServo1 = constrain(90 + Gri_roll - 360 + delta, 0, 180);
+    int rollServo2 = constrain(90 - Gri_roll + 360, 0, 180);
+    servo_roll1.write(rollServo1);
+    servo_roll2.write(rollServo2);
+  }
 
-  roll = 90 + Gri_roll;
-  OldValueRoll = roll;
-  pitch = 90 + Gri_pitch;
-  OldValuePitch = pitch;
-  yaw = 90.0 + (Gri_yaw - initialYaw);
-  OldValueYaw = yaw;
+  else {
+    int rollServo1 = constrain(90 + Gri_roll + delta, 0, 180);
+    int rollServo2 = constrain(90 - Gri_roll, 0, 180);
+    servo_roll1.write(rollServo1);
+    servo_roll2.write(rollServo2)
+  }
 
-  servo_roll1.write(roll + delta);
-  servo_roll2.write(180 - roll);
-  servo_pitch.write(pitch);
-  servo_yaw.write(yaw);
+  // Code to make pitch centered at 90º
+  int pitchServo = constrain(90 + Gri_pitch, 0, 180);
+  servo_pitch.write(pitchServo);
+  
+  // Code to make yaw independent from the north, centered at 90º
+   if (firstTime) {
+    initialYaw = Gri_yaw;   // Initial reference from IMU
+    actualYawServo = 90;     // Neutral position
+    servo_yaw.write(actualYawServo);
+    firstTime = false;
+  } else {
+    // Compute angular difference (handle wrap-around)
+    float deltaYaw = Gri_yaw - initialYaw;
+    if (deltaYaw > 180)  deltaYaw -= 360;
+    if (deltaYaw < -180) deltaYaw += 360;
+
+    // Apply incremental movement
+    actualYawServo += deltaYaw;
+
+    // Constrain to servo range
+    actualYawServo = constrain(actualYawServo, 0, 180);
+
+    // Move the servo
+    servo_yaw.write(actualYawServo);
+
+    // Update reference for next iteration
+    initialYaw = Gri_yaw;
+  }
+  
 }
 
 // Send torque to gripper and PC
@@ -157,7 +188,7 @@ void sendTorqueUDP() {
   doc["Torque_pitch"] = Torque_pitch;
   doc["Torque_yaw"] = Torque_yaw;
 
-  char jsonBuffer[512];
+  char jsonBuffer[256];
   serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
 
   // Send to gripper
@@ -170,7 +201,7 @@ void sendTorqueUDP() {
   udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
   udp.endPacket();
 
-  Serial.println("📤 Enviados torques:");
+  Serial.println("📤 Sent torques:");
   serializeJsonPretty(doc, Serial);
   Serial.println();
 }

@@ -84,6 +84,7 @@ void sendOrientationUDP() {
   udp.endPacket();
 }
 
+// Code to receive torque from servo module
 void receiveTorqueUDP() {
   int packetSize = udp.parsePacket();
   if (packetSize) {
@@ -114,18 +115,19 @@ void receiveTorqueUDP() {
         Serial.print(" Torque_roll2: "); Serial.print(Torque_roll2);
         Serial.print(" Torque_pitch: "); Serial.println(Torque_pitch);
         Serial.print(" Torque_yaw: "); Serial.println(Torque_yaw);
+
+        // Vibration motor control based on torque values
+        float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw;
+        // Convert torque to PWM value (0-255)
+        int vibrationValue = constrain(totalTorque * 2.5, 0, 255); // Adjust the scaling factor as needed
+        ledcWrite(0, vibrationValue); // Set the PWM value for the vibration motor
+        Serial.print("Vibration motor value: ");
+        Serial.println(vibrationValue);
       } else {
         Serial.println("Unknown device.");
       }
     }
-  }
-  // Vibration motor control based on torque values
-  float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw;
-  // Convert torque to PWM value (0-255)
-  int vibrationValue = constrain(totalTorque * 2.5, 0, 255); // Adjust the scaling factor as needed
-  ledcWrite(0, vibrationValue); // Set the PWM value for the vibration motor
-  Serial.print("Vibration motor value: ");
-  Serial.println(vibrationValue); 
+  } 
 }
 
 void setup() {
